@@ -6,6 +6,7 @@ import { newsRoutes } from "./api/routes/news";
 import { statsRoutes } from "./api/routes/stats";
 import { sourcesRoutes } from "./api/routes/sources";
 import { healthRoutes } from "./api/routes/health";
+import { adminRoutes } from "./api/routes/admin";
 import { startScheduler } from "./crawler/scheduler";
 import { config } from "./config/env";
 import { logger } from "./utils/logger";
@@ -18,6 +19,7 @@ async function main() {
     await app.register(statsRoutes);
     await app.register(sourcesRoutes);
     await app.register(healthRoutes);
+    await app.register(adminRoutes);
 
     await app.listen({ port: config.port, host: "0.0.0.0" });
     logger.info(`Sunucu ${config.port} portunda çalışıyor`);

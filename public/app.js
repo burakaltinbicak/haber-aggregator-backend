@@ -5,6 +5,8 @@ const API_URL = '';
 let allNews = [];
 let allSources = [];
 let selectedSourceId = null;
+let currentPage = 1;
+const itemsPerPage = 12;
 
 // DOM Elements
 const sourceButtonsEl = document.getElementById('source-buttons');
@@ -31,14 +33,12 @@ async function loadSources() {
 
         sourceButtonsEl.innerHTML = '';
 
-        // "Tümü" butonu
         const allBtn = document.createElement('button');
         allBtn.className = 'source-btn active';
         allBtn.textContent = 'Tümü';
         allBtn.onclick = () => selectSource(null);
         sourceButtonsEl.appendChild(allBtn);
 
-        // Kaynak butonları
         allSources.forEach(source => {
             const btn = document.createElement('button');
             btn.className = 'source-btn';
@@ -51,52 +51,61 @@ async function loadSources() {
     }
 }
 
-// Select source and filter news
 function selectSource(sourceId) {
     selectedSourceId = sourceId;
+    currentPage = 1;
 
-    // Buton active class'ını güncelle
     document.querySelectorAll('.source-btn').forEach(btn => {
         btn.classList.remove('active');
     });
     event.target.classList.add('active');
 
     renderNews();
+    renderPagination();
 }
 
-// Load news
 async function loadNews() {
     newsGridEl.innerHTML = '<div class="loading">Yükleniyor...</div>';
 
     try {
         const response = await fetch(`${API_URL}/news`);
         allNews = await response.json();
+        currentPage = 1;
         renderNews();
+        renderPagination();
     } catch (error) {
         newsGridEl.innerHTML = '<div class="error">Haberler yüklenemedi</div>';
         console.error('Haberler yüklenemedi:', error);
     }
 }
 
-// Render news cards
-function renderNews() {
-    let filteredNews = allNews;
-
+function getFilteredNews() {
+    let filtered = allNews;
     if (selectedSourceId) {
-        filteredNews = allNews.filter(news => {
+        filtered = allNews.filter(news => {
             const newsSourceId = news.sourceId?._id || news.sourceId;
             return newsSourceId === selectedSourceId;
         });
     }
+    return filtered;
+}
+
+function renderNews() {
+    const filteredNews = getFilteredNews();
 
     if (filteredNews.length === 0) {
         newsGridEl.innerHTML = '<div class="loading">Haber bulunamadı</div>';
         return;
     }
 
+    const totalPages = Math.ceil(filteredNews.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const pageNews = filteredNews.slice(startIndex, endIndex);
+
     newsGridEl.innerHTML = '';
 
-    filteredNews.forEach(news => {
+    pageNews.forEach(news => {
         const card = document.createElement('div');
         card.className = 'news-card';
         card.onclick = () => openModal(news);
@@ -127,7 +136,94 @@ function renderNews() {
     });
 }
 
-// Open modal with news detail
+function renderPagination() {
+    const filteredNews = getFilteredNews();
+    const totalPages = Math.ceil(filteredNews.length / itemsPerPage);
+
+    const oldPagination = document.getElementById('pagination');
+    if (oldPagination) oldPagination.remove();
+
+    if (totalPages <= 1) return;
+
+    const paginationEl = document.createElement('div');
+    paginationEl.id = 'pagination';
+    paginationEl.className = 'pagination';
+
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'page-btn';
+    prevBtn.textContent = '←';
+    prevBtn.disabled = currentPage === 1;
+    prevBtn.onclick = () => changePage(currentPage - 1);
+    paginationEl.appendChild(prevBtn);
+
+    const maxVisible = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+
+    if (endPage - startPage < maxVisible - 1) {
+        startPage = Math.max(1, endPage - maxVisible + 1);
+    }
+
+    if (startPage > 1) {
+        const firstBtn = document.createElement('button');
+        firstBtn.className = 'page-btn';
+        firstBtn.textContent = '1';
+        firstBtn.onclick = () => changePage(1);
+        paginationEl.appendChild(firstBtn);
+
+        if (startPage > 2) {
+            const dots = document.createElement('span');
+            dots.className = 'page-dots';
+            dots.textContent = '...';
+            paginationEl.appendChild(dots);
+        }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        const btn = document.createElement('button');
+        btn.className = 'page-btn' + (i === currentPage ? ' active' : '');
+        btn.textContent = i;
+        btn.onclick = () => changePage(i);
+        paginationEl.appendChild(btn);
+    }
+
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            const dots = document.createElement('span');
+            dots.className = 'page-dots';
+            dots.textContent = '...';
+            paginationEl.appendChild(dots);
+        }
+
+        const lastBtn = document.createElement('button');
+        lastBtn.className = 'page-btn';
+        lastBtn.textContent = totalPages;
+        lastBtn.onclick = () => changePage(totalPages);
+        paginationEl.appendChild(lastBtn);
+    }
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'page-btn';
+    nextBtn.textContent = '→';
+    nextBtn.disabled = currentPage === totalPages;
+    nextBtn.onclick = () => changePage(currentPage + 1);
+    paginationEl.appendChild(nextBtn);
+
+    newsGridEl.parentNode.insertBefore(paginationEl, newsGridEl.nextSibling);
+}
+
+function changePage(newPage) {
+    const filteredNews = getFilteredNews();
+    const totalPages = Math.ceil(filteredNews.length / itemsPerPage);
+
+    if (newPage < 1 || newPage > totalPages) return;
+
+    currentPage = newPage;
+    renderNews();
+    renderPagination();
+    newsGridEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function openModal(news) {
     modalTitleEl.textContent = news.title;
     modalImageEl.src = news.imageUrl || '';
@@ -137,12 +233,10 @@ function openModal(news) {
     modalEl.classList.remove('hidden');
 }
 
-// Close modal
 function closeModal() {
     modalEl.classList.add('hidden');
 }
 
-// Crawl (fetch new news)
 async function crawl() {
     crawlBtnEl.disabled = true;
     crawlBtnEl.textContent = 'Çekiliyor...';
@@ -160,7 +254,6 @@ async function crawl() {
     }
 }
 
-// Format date
 function formatDate(dateString) {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -173,12 +266,10 @@ function formatDate(dateString) {
     });
 }
 
-// Event listeners
 crawlBtnEl.onclick = crawl;
 modalCloseEl.onclick = closeModal;
 modalEl.onclick = (e) => {
     if (e.target === modalEl) closeModal();
 };
 
-// Start
 init();

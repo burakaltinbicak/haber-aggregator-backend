@@ -292,3 +292,47 @@ h1 {
     font-size: 1.1rem;
     grid-column: 1/-1;
 }
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin: 30px 0;
+    padding: 20px;
+    flex-wrap: wrap;
+}
+
+.page-btn {
+    padding: 8px 14px;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.page-btn:hover:not(:disabled) {
+    background: #1a1a2e;
+    color: white;
+    border-color: #1a1a2e;
+}
+
+.page-btn.active {
+    background: #1a1a2e;
+    color: white;
+    border-color: #1a1a2e;
+}
+
+.page-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.page-dots {
+    padding: 8px;
+    color: #666;
+    font-size: 14px;
+}
