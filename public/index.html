@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Haber Agregatörü</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <header>
+        <div class="header-inner">
+            <h1>📰 Haber Agregatörü</h1>
+            <div id="source-buttons"></div>
+            <button id="crawl-btn">🔄 Şimdi Çek</button>
+        </div>
+    </header>
+
+    <main id="news-grid"></main>
+
+    <div id="modal" class="hidden">
+        <div class="modal-content">
+            <span id="modal-close">&times;</span>
+            <h2 id="modal-title"></h2>
+            <img id="modal-image" src="" alt="">
+            <div id="modal-body"></div>
+            <a id="modal-link" href="" target="_blank">Orijinal Habere Git →</a>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
