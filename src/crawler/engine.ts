@@ -10,6 +10,7 @@ export async function runCrawler(): Promise<{ inserted: number; skipped: number 
 
     try {
         const sources = await Source.find({ isActive: true });
+
         for (const source of sources) {
             if (!source.feeds || source.feeds.length === 0) {
                 logger.warn(`${source.name} için feed bulunamadı`);

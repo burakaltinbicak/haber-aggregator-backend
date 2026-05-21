@@ -51,7 +51,7 @@ function extractImageUrl(entry: any): string | undefined {
     // 5. Description içindeki ilk <img> tag'ini regex ile bul
     const desc = entry.description?.[0] ?? entry.summary?.[0]?._ ?? entry.summary?.[0] ?? "";
     if (typeof desc === "string") {
-        const imgMatch = desc.match(/<<img[^>]+src=["']([^"']+)["']/i);
+        const imgMatch = desc.match(/<img[^>]+src=["']([^"']+)["']/i);
         if (imgMatch) return imgMatch[1];
     }
     return undefined;
