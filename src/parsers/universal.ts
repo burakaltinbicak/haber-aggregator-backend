@@ -1,5 +1,6 @@
 import axios from "axios";
 import { parseStringPromise } from "xml2js";
+import { logger } from "../utils/logger";
 
 export interface ParsedArticle {
     externalId: string;
@@ -31,27 +32,22 @@ function detectFormat(parsed: any): "atom" | "rss2" | "unknown" {
 }
 
 function extractImageUrl(entry: any): string | undefined {
-    // 1. RSS 2.0 enclosure
     if (entry.enclosure?.[0]?.$.url) {
         return entry.enclosure[0].$.url;
     }
-    // 2. Media thumbnail (Yahoo Media RSS - çok yaygın)
     if (entry["media:thumbnail"]?.[0]?.$.url) {
         return entry["media:thumbnail"][0].$.url;
     }
-    // 3. Media content
     if (entry["media:content"]?.[0]?.$.url) {
         return entry["media:content"][0].$.url;
     }
-    // 4. Atom link rel="enclosure"
     if (Array.isArray(entry.link)) {
         const enclosure = entry.link.find((l: any) => l?.$?.rel === "enclosure");
         if (enclosure?.$?.href) return enclosure.$.href;
     }
-    // 5. Description içindeki ilk <img> tag'ini regex ile bul
     const desc = entry.description?.[0] ?? entry.summary?.[0]?._ ?? entry.summary?.[0] ?? "";
     if (typeof desc === "string") {
-        const imgMatch = desc.match(/<img[^>]+src=["']([^"']+)["']/i);
+        const imgMatch = desc.match(/<<img[^>]+src=["']([^"']+)["']/i);
         if (imgMatch) return imgMatch[1];
     }
     return undefined;
@@ -118,32 +114,52 @@ function parseRss2Item(item: any): FeedEntry | null {
     };
 }
 
-export async function parseFeedUrl(url: string, category?: string): Promise<ParsedArticle[]> {
-    const response = await axios.get(url, { timeout: 10000 });
-    const parsed = await parseStringPromise(response.data);
+export async function parseFeedUrl(url: string, category?: string, retries: number = 2): Promise<ParsedArticle[]> {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const response = await axios.get(url, {
+                timeout: 5000,
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    "Accept": "application/rss+xml, application/xml, text/xml, */*"
+                }
+            });
 
-    const format = detectFormat(parsed);
-    const articles: ParsedArticle[] = [];
+            const parsed = await parseStringPromise(response.data);
+            const format = detectFormat(parsed);
+            const articles: ParsedArticle[] = [];
 
-    if (format === "atom") {
-        const entries = parsed.feed.entry ?? [];
-        for (const entry of entries) {
-            const parsed = parseAtomEntry(entry);
-            if (parsed) {
-                articles.push({ ...parsed, category });
+            if (format === "atom") {
+                const entries = parsed.feed.entry ?? [];
+                for (const entry of entries) {
+                    const parsed = parseAtomEntry(entry);
+                    if (parsed) articles.push({ ...parsed, category });
+                }
+            } else if (format === "rss2") {
+                const items = parsed.rss.channel[0].item ?? [];
+                for (const item of items) {
+                    const parsed = parseRss2Item(item);
+                    if (parsed) articles.push({ ...parsed, category });
+                }
+            } else {
+                throw new Error(`Desteklenmeyen RSS formatı: ${url}`);
             }
-        }
-    } else if (format === "rss2") {
-        const items = parsed.rss.channel[0].item ?? [];
-        for (const item of items) {
-            const parsed = parseRss2Item(item);
-            if (parsed) {
-                articles.push({ ...parsed, category });
+
+            return articles;
+
+        } catch (error: any) {
+            const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+            const isLastAttempt = attempt === retries;
+
+            if (isTimeout && !isLastAttempt) {
+                logger.warn(`RSS timeout (${attempt}/${retries}): ${url}, 3sn sonra tekrar denenecek...`);
+                await new Promise(r => setTimeout(r, 3000));
+                continue;
             }
+
+            throw error;
         }
-    } else {
-        throw new Error(`Desteklenmeyen RSS formatı: ${url}`);
     }
 
-    return articles;
+    return [];
 }

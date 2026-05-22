@@ -19,10 +19,35 @@ const modalImageEl = document.getElementById('modal-image');
 const modalBodyEl = document.getElementById('modal-body');
 const modalLinkEl = document.getElementById('modal-link');
 
+
+async function loadStats() {
+    try {
+        const response = await fetch(`${API_URL}/stats`);
+        const stats = await response.json();
+
+        document.getElementById('stat-total').textContent = stats.totalNews?.toLocaleString('tr-TR') || '-';
+        document.getElementById('stat-sources').textContent = stats.totalSources || '-';
+        document.getElementById('stat-24h').textContent = stats.last24HoursNews?.toLocaleString('tr-TR') || '-';
+
+        if (stats.lastCrawlAt) {
+            const date = new Date(stats.lastCrawlAt);
+            document.getElementById('stat-last').textContent = isNaN(date.getTime())
+                ? '-'
+                : date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        } else {
+            document.getElementById('stat-last').textContent = '-';
+        }
+    } catch (error) {
+        console.error('Stats yüklenemedi:', error);
+    }
+}
+
+
 // Initialize
 async function init() {
     await loadSources();
     await loadNews();
+    await loadStats();
 }
 
 // Load sources and create buttons
@@ -246,6 +271,8 @@ async function crawl() {
         const result = await response.json();
         alert(`Crawl tamamlandı: ${result.inserted} yeni haber, ${result.skipped} atlandı`);
         await loadNews();
+        await loadStats();
+
     } catch (error) {
         alert('Crawl hatası: ' + error.message);
     } finally {
