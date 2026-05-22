@@ -2,6 +2,8 @@ import { Source, News } from "../database/models";
 import { parseFeedUrl } from "../parsers/universal";
 import { logger } from "../utils/logger";
 import { fetchContentWithReadability } from "../parsers/readability";
+import { fetchWithSmartExtractor } from "../parsers/smartExtractor";
+import { isContentSufficient, getRealTextLength } from "../parsers/contentUtils";
 
 export async function runCrawler(): Promise<{ inserted: number; skipped: number }> {
     let inserted = 0;
@@ -34,29 +36,47 @@ export async function runCrawler(): Promise<{ inserted: number; skipped: number 
                                 continue;
                             }
 
-                            // YENİ: Önce DB'de var mı kontrol et
+                            // Duplicate kontrolü
                             const existingNews = await News.findOne({ externalId: article.externalId });
                             if (existingNews) {
                                 skipped++;
-                                continue; // Zaten var, hiçbir şey yapma
+                                continue;
                             }
 
-                            // Sadece yeni haberde ve content eksikse Readability
-                            // content var ama gerçekten uzun metin içeriyor mu? (<p> veya <br> var mı?)
-                            const hasRealContent = article.content && (
-                                article.content.includes('<p>') ||
-                                article.content.includes('<br') ||
-                                article.content.includes('<div') ||
-                                (article.content.length > 500 && !article.content.includes('<article'))
-                            );
+                            // YENİ: RSS content'ini GERÇEK metin uzunluğuyla değerlendir
+                            const rssContentLength = getRealTextLength(article.content);
+                            const hasRealContent = isContentSufficient(article.content, 300); // 300+ karakter gerçek metin
 
+                            let extractionMethod = "rss";
+                            let finalContent = article.content;
+
+                            // Eğer RSS content'i yetersizse, siteye git ve çek
                             if (!hasRealContent) {
-                                logger.info(`[${source.name}] Yeni haber, content eksik, Readability deneniyor: ${article.originalUrl}`);
-                                const readabilityContent = await fetchContentWithReadability(article.originalUrl);
-                                if (readabilityContent) {
-                                    article.content = readabilityContent;
-                                    logger.info(`[${source.name}] Content Readability ile tamamlandi: ${article.originalUrl}`);
+                                logger.info(
+                                    `[${source.name}] RSS content yetersiz (${rssContentLength} karakter), siteye gidiliyor: ${article.originalUrl}`
+                                );
+
+                                // 1. Readability dene
+                                finalContent = await fetchContentWithReadability(article.originalUrl);
+                                extractionMethod = "readability";
+
+                                // 2. Readability başarısız olursa Smart Extractor dene
+                                if (!finalContent) {
+                                    logger.info(`[${source.name}] Readability başarısız, Smart Extractor deneniyor...`);
+                                    finalContent = await fetchWithSmartExtractor(article.originalUrl);
+                                    extractionMethod = "smart_extractor";
                                 }
+
+                                if (finalContent) {
+                                    logger.info(
+                                        `[${source.name}] Content ${extractionMethod} ile tamamlandi (${finalContent.length} karakter): ${article.originalUrl}`
+                                    );
+                                } else {
+                                    logger.warn(`[${source.name}] Hicbir yontemle content alinamadi: ${article.originalUrl}`);
+                                    extractionMethod = "failed";
+                                }
+                            } else {
+                                logger.info(`[${source.name}] RSS content yeterli (${rssContentLength} karakter), siteye gidilmiyor.`);
                             }
 
                             await News.create({
@@ -64,12 +84,14 @@ export async function runCrawler(): Promise<{ inserted: number; skipped: number 
                                 externalId: article.externalId,
                                 title: article.title,
                                 summary: article.summary,
-                                content: article.content,
+                                content: finalContent,
                                 imageUrl: article.imageUrl,
                                 originalUrl: article.originalUrl,
                                 publishedAt: article.publishedAt,
                                 rawData: article.rawData,
                                 category: article.category,
+                                // Opsiyonel: extractionMethod'u da kaydetmek istersen News schema'ya ekle
+                                // extractionMethod,
                             });
                             inserted++;
                         } catch (error: any) {
